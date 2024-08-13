@@ -44,7 +44,23 @@ export async function getTurbopackJsConfig(
   return jsConfig ?? { compilerOptions: {} }
 }
 
-export class ModuleBuildError extends Error {}
+// An error generated from emitted Turbopack issues. This can include build
+// errors caused by issues with user code.
+export class ModuleBuildError extends Error {
+  name = 'ModuleBuildError'
+}
+
+// An error caused by an internal issue in Turbopack. These should be written
+// to a log file and details should not be shown to the user.
+export class TurbopackInternalError extends Error {
+  name = 'TurbopackInternalError'
+  cause: unknown
+
+  constructor(message: string, cause: unknown) {
+    super(message)
+    this.cause = cause
+  }
+}
 
 /**
  * Thin stopgap workaround layer to mimic existing wellknown-errors-plugin in webpack's build
@@ -230,7 +246,9 @@ export function processIssues(
 
     if (issue.severity !== 'warning') {
       relevantIssues.add(formatted)
-      if (logErrors && isWellKnownError(issue)) {
+
+      // if we throw the issue it will most likely get handed and logged elsewhere
+      if (logErrors && !throwIssue && isWellKnownError(issue)) {
         Log.error(formatted)
       }
     }
@@ -453,7 +471,7 @@ export async function handleRouteType({
       const writtenEndpoint = await route.endpoint.writeToDisk()
       hooks?.handleWrittenEndpoint(key, writtenEndpoint)
 
-      const type = writtenEndpoint?.type
+      const type = writtenEndpoint.type
 
       await manifestLoader.loadPagesManifest(page)
       if (type === 'edge') {
@@ -494,7 +512,7 @@ export async function handleRouteType({
         }
       })
 
-      const type = writtenEndpoint?.type
+      const type = writtenEndpoint.type
 
       if (type === 'edge') {
         await manifestLoader.loadMiddlewareManifest(page, 'app')
@@ -524,7 +542,7 @@ export async function handleRouteType({
       const writtenEndpoint = await route.endpoint.writeToDisk()
       hooks?.handleWrittenEndpoint(key, writtenEndpoint)
 
-      const type = writtenEndpoint?.type
+      const type = writtenEndpoint.type
 
       await manifestLoader.loadAppPathsManifest(page)
 

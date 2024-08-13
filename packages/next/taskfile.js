@@ -623,6 +623,15 @@ export async function ncc_browserslist(task, opts) {
   await task
     .source(relative(__dirname, require.resolve('browserslist')))
     .ncc({ packageName: 'browserslist', externals })
+    // eslint-disable-next-line require-yield
+    .run({ every: true }, function* (file) {
+      const source = file.data.toString()
+      // We replace the module/chunk loading code with our own implementation in Next.js.
+      file.data = source.replace(
+        /process\.env\.BROWSERSLIST_IGNORE_OLD_DATA/g,
+        'true'
+      )
+    })
     .target('src/compiled/browserslist')
 
   await fs.writeFile(nodeFile, content)
@@ -997,10 +1006,9 @@ export async function ncc_amp_optimizer(task, opts) {
     )
     .ncc({
       externals,
-      precompiled: false,
       packageName: '@ampproject/toolbox-optimizer',
     })
-    .target('dist/compiled/@ampproject/toolbox-optimizer')
+    .target('src/compiled/@ampproject/toolbox-optimizer')
 }
 // eslint-disable-next-line camelcase
 externals['async-retry'] = 'next/dist/compiled/async-retry'
@@ -2118,15 +2126,11 @@ export async function ncc_ws(task, opts) {
 }
 
 externals['path-to-regexp'] = 'next/dist/compiled/path-to-regexp'
-export async function path_to_regexp(task, opts) {
+export async function ncc_path_to_regexp(task, opts) {
   await task
-    .source(
-      join(
-        dirname(relative(__dirname, require.resolve('path-to-regexp'))),
-        '*.{js,map}'
-      )
-    )
-    .target('dist/compiled/path-to-regexp')
+    .source(relative(__dirname, require.resolve('path-to-regexp')))
+    .ncc({ packageName: 'path-to-regexp', externals })
+    .target('src/compiled/path-to-regexp')
 }
 
 // eslint-disable-next-line camelcase
@@ -2160,12 +2164,7 @@ export async function ncc_https_proxy_agent(task, opts) {
 
 export async function precompile(task, opts) {
   await task.parallel(
-    [
-      'browser_polyfills',
-      'path_to_regexp',
-      'copy_ncced',
-      'copy_styled_jsx_assets',
-    ],
+    ['browser_polyfills', 'copy_ncced', 'copy_styled_jsx_assets'],
     opts
   )
 }
@@ -2179,9 +2178,10 @@ export async function copy_ncced(task) {
 
 export async function ncc(task, opts) {
   await task
-    .clear('compiled')
+    .clear('src/compiled')
     .parallel(
       [
+        'ncc_amp_optimizer',
         'ncc_node_html_parser',
         'ncc_napirs_triples',
         'ncc_p_limit',
@@ -2255,6 +2255,7 @@ export async function ncc(task, opts) {
         'ncc_native_url',
         'ncc_neo_async',
         'ncc_ora',
+        'ncc_path_to_regexp',
         'ncc_postcss_safe_parser',
         'ncc_postcss_flexbugs_fixes',
         'ncc_postcss_preset_env',
@@ -2314,6 +2315,7 @@ export async function ncc(task, opts) {
       'ncc_edge_runtime_ponyfill',
       'ncc_edge_runtime',
       'ncc_mswjs_interceptors',
+      'ncc_rsc_poison_packages',
     ],
     opts
   )
@@ -2347,9 +2349,6 @@ export async function next_compile(task, opts) {
       'shared_re_exported_esm',
       'server_wasm',
       'experimental_testmode',
-      // we compile this each time so that fresh runtime data is pulled
-      // before each publish
-      'ncc_amp_optimizer',
     ],
     opts
   )
